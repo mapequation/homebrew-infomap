@@ -5,21 +5,27 @@ class Infomap < Formula
   sha256 "2a94f10dd3974ebb2b5ffabae5c018b928e10926cb9b3d9ba77f5416e0a7c392"
   license "GPL-3.0-or-later"
 
+  option "without-openmp", "Build without OpenMP support"
+
   on_macos do
-    depends_on "libomp"
+    depends_on "libomp" if build.with? "openmp"
   end
 
   def install
-    if OS.mac?
+    if OS.mac? && build.with?("openmp")
       ENV.append "CPPFLAGS", "-I#{Formula["libomp"].opt_include}"
       ENV.append "CXXFLAGS", "-I#{Formula["libomp"].opt_include}"
       ENV.append "LDFLAGS", "-L#{Formula["libomp"].opt_lib}"
     end
 
     if (buildpath/"mk/common.mk").exist?
-      system "make", "build-native", "JOBS=#{ENV.make_jobs}"
+      args = ["build-native", "JOBS=#{ENV.make_jobs}"]
+      args << "OPENMP=0" unless build.with? "openmp"
+      system "make", *args
     else
-      system "make", "-j#{ENV.make_jobs}"
+      args = ["-j#{ENV.make_jobs}"]
+      args.unshift("noomp") unless build.with? "openmp"
+      system "make", *args
     end
 
     bin.install "Infomap"
