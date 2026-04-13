@@ -33,6 +33,7 @@ class Infomap < Formula
     EOS
 
     output_dir = testpath/"output"
+    output_dir.mkpath
     system bin/"Infomap", testpath/"tiny.net", output_dir, "--tree", "--silent"
 
     assert_match version.to_s, shell_output("#{bin}/Infomap --version")
