@@ -2,9 +2,18 @@
 
 ## How do I install these formulae?
 
-`brew install mapequation/infomap/<formula>`
+Primary install path:
 
-Or `brew tap mapequation/infomap` and then `brew install <formula>`.
+```bash
+brew tap mapequation/infomap
+brew install infomap
+```
+
+Alternative one-command install:
+
+```bash
+brew install mapequation/infomap/infomap
+```
 
 ## Documentation
 
