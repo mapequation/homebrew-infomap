@@ -25,6 +25,19 @@ class Infomap < Formula
     bin.install "Infomap"
   end
 
+  def caveats
+    <<~EOS
+      This formula installs the native Infomap CLI.
+
+      Run it with:
+        Infomap --help
+        Infomap --version
+
+      For the Python package/API, use:
+        pip install infomap
+    EOS
+  end
+
   test do
     (testpath/"tiny.net").write <<~EOS
       1 2
