@@ -1,0 +1,179 @@
+name: Update Infomap
+
+on:
+  repository_dispatch:
+    types: [infomap_release_published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact Infomap version to package.
+        required: true
+        type: string
+      release_tag:
+        description: Release tag to package. Defaults to v<version>.
+        required: false
+        type: string
+      release_url:
+        description: Release URL to link in the pull request body.
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: update-infomap-${{ github.event.client_payload.version || inputs.version || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Resolve target release
+        id: release
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
+          INPUT_RELEASE_URL: ${{ inputs.release_url }}
+          PAYLOAD_VERSION: ${{ github.event.client_payload.version }}
+          PAYLOAD_RELEASE_TAG: ${{ github.event.client_payload.release_tag }}
+          PAYLOAD_RELEASE_URL: ${{ github.event.client_payload.release_url }}
+        run: |
+          set -euo pipefail
+
+          version="${INPUT_VERSION:-$PAYLOAD_VERSION}"
+          if [ -z "$version" ]; then
+            echo "No version provided." >&2
+            exit 1
+          fi
+
+          release_tag="${INPUT_RELEASE_TAG:-$PAYLOAD_RELEASE_TAG}"
+          if [ -z "$release_tag" ]; then
+            release_tag="v$version"
+          fi
+
+          release_url="${INPUT_RELEASE_URL:-$PAYLOAD_RELEASE_URL}"
+          if [ -z "$release_url" ]; then
+            release_url="https://github.com/mapequation/infomap/releases/tag/$release_tag"
+          fi
+
+          tarball_url="https://github.com/mapequation/infomap/archive/refs/tags/$release_tag.tar.gz"
+
+          {
+            echo "version=$version"
+            echo "release_tag=$release_tag"
+            echo "release_url=$release_url"
+            echo "tarball_url=$tarball_url"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Check current formula version
+        id: current
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          current_version="$(ruby -e 'content = File.read("Formula/infomap.rb"); match = content.match(%r{refs/tags/v([^"/]+)\.tar\.gz}); abort("version not found") unless match; puts match[1]')"
+          if [ "$current_version" = "$VERSION" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Formula already targets $VERSION"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download release tarball
+        if: steps.current.outputs.skip != 'true'
+        env:
+          TARBALL_URL: ${{ steps.release.outputs.tarball_url }}
+        run: |
+          set -euo pipefail
+          curl -L --fail --silent --show-error "$TARBALL_URL" -o infomap.tar.gz
+
+      - name: Compute tarball checksum
+        if: steps.current.outputs.skip != 'true'
+        id: checksum
+        run: |
+          set -euo pipefail
+          echo "value=$(sha256sum infomap.tar.gz | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+
+      - name: Update formula
+        if: steps.current.outputs.skip != 'true'
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          RELEASE_TAG: ${{ steps.release.outputs.release_tag }}
+          SHA256: ${{ steps.checksum.outputs.value }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          import pathlib
+          import re
+
+          path = pathlib.Path("Formula/infomap.rb")
+          content = path.read_text()
+
+          content, url_count = re.subn(
+              r'url "https://github\.com/mapequation/infomap/archive/refs/tags/v[^"]+\.tar\.gz"',
+              f'url "https://github.com/mapequation/infomap/archive/refs/tags/{os.environ["RELEASE_TAG"]}.tar.gz"',
+              content,
+              count=1,
+          )
+          content, sha_count = re.subn(
+              r'sha256 "[0-9a-f]{64}"',
+              f'sha256 "{os.environ["SHA256"]}"',
+              content,
+              count=1,
+          )
+          if url_count != 1 or sha_count != 1:
+              raise SystemExit("failed to update Formula/infomap.rb")
+          path.write_text(content)
+          PY
+
+      - name: Commit formula bump
+        if: steps.current.outputs.skip != 'true'
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          branch="build/bump-infomap-$VERSION"
+          git checkout -B "$branch"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/infomap.rb
+          git commit -m "build: bump infomap to $VERSION"
+          git push --force-with-lease origin "$branch"
+
+      - name: Open pull request
+        if: steps.current.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.release.outputs.version }}
+          RELEASE_URL: ${{ steps.release.outputs.release_url }}
+        run: |
+          set -euo pipefail
+
+          branch="build/bump-infomap-$VERSION"
+          title="build: bump infomap to $VERSION"
+          body="Automated Homebrew formula bump for Infomap $VERSION."
+          body="$body"$'\n\n'"Release: $RELEASE_URL"
+
+          existing_pr="$(gh pr list --base main --head "$branch" --state open --json number --jq '.[0].number')"
+          if [ -n "$existing_pr" ]; then
+            echo "Pull request #$existing_pr already exists for $branch"
+            exit 0
+          fi
+
+          gh pr create \
+            --base main \
+            --head "$branch" \
+            --title "$title" \
+            --body "$body"
