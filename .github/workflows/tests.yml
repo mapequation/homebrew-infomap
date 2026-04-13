@@ -52,6 +52,9 @@ jobs:
       - run: brew test-bot --only-formulae --root-url="${ROOT_URL}"
         if: github.event_name == 'pull_request'
 
+      - run: brew test-bot --only-formulae
+        if: github.event_name != 'pull_request'
+
       - name: Upload bottles as artifact
         if: always() && github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4
