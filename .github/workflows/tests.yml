@@ -7,7 +7,10 @@ on:
   pull_request:
 
 permissions:
+  actions: read
+  checks: read
   contents: read
+  pull-requests: read
 
 jobs:
   test-bot:
@@ -18,7 +21,9 @@ jobs:
     steps:
       - name: Set up Homebrew
         id: set-up-homebrew
-        uses: Homebrew/actions/setup-homebrew@master
+        uses: Homebrew/actions/setup-homebrew@main
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Cache Homebrew Bundler RubyGems
         id: cache
@@ -38,7 +43,13 @@ jobs:
 
       - run: brew test-bot --only-tap-syntax
 
-      - run: brew test-bot --only-formulae
+      - name: Resolve bottle root URL
+        if: github.event_name == 'pull_request'
+        run: |
+          version="$(ruby -e 'content = File.read("Formula/infomap.rb"); match = content.match(%r{refs/tags/v([^"/]+)\.tar\.gz}); abort("version not found") unless match; puts match[1]')"
+          echo "ROOT_URL=https://github.com/${GITHUB_REPOSITORY}/releases/download/infomap-${version}" >> "$GITHUB_ENV"
+
+      - run: brew test-bot --only-formulae --root-url="${ROOT_URL}"
         if: github.event_name == 'pull_request'
 
       - name: Upload bottles as artifact
