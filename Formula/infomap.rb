@@ -8,7 +8,7 @@ class Infomap < Formula
   option "without-openmp", "Build without OpenMP support"
 
   on_macos do
-    depends_on "libomp" if build.with? "openmp"
+    depends_on "libomp"
   end
 
   def install
@@ -20,13 +20,13 @@ class Infomap < Formula
 
     if (buildpath/"mk/common.mk").exist?
       args = ["build-native", "JOBS=#{ENV.make_jobs}"]
-      args << "OPENMP=0" unless build.with? "openmp"
-      system "make", *args
+      args << "OPENMP=0" if build.without? "openmp"
     else
       args = ["-j#{ENV.make_jobs}"]
-      args.unshift("noomp") unless build.with? "openmp"
-      system "make", *args
+      args.unshift("noomp") if build.without? "openmp"
     end
+
+    system "make", *args
 
     bin.install "Infomap"
   end
