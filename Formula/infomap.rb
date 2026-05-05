@@ -1,8 +1,8 @@
 class Infomap < Formula
   desc "Multi-level network clustering based on the Map Equation"
   homepage "https://github.com/mapequation/infomap"
-  url "https://github.com/mapequation/infomap/archive/refs/tags/v2.10.0.tar.gz"
-  sha256 "cca2d68a0e17ab0e78c46146d2075c177dbb05db395faaf69589e6500a3b249d"
+  url "https://github.com/mapequation/infomap/archive/refs/tags/v2.10.1.tar.gz"
+  sha256 "0e7d6985d056373045713758e7bb62549576c4d11514fe63cc9c4da180799737"
   license "GPL-3.0-or-later"
 
   option "without-openmp", "Build without OpenMP support"
