@@ -29,6 +29,9 @@ class Infomap < Formula
     system "make", *args
 
     bin.install "Infomap"
+    if Utils.safe_popen_read(bin/"Infomap", "--help").include?("--completion")
+      generate_completions_from_executable(bin/"Infomap", "--completion", shells: [:bash, :zsh])
+    end
   end
 
   def caveats
@@ -57,5 +60,10 @@ class Infomap < Formula
 
     assert_match version.to_s, shell_output("#{bin}/Infomap --version")
     assert_path_exists output_dir/"tiny.tree"
+
+    if shell_output("#{bin}/Infomap --help").include?("--completion")
+      assert_match "--flow-model", shell_output("#{bin}/Infomap --completion bash")
+      assert_match "#compdef Infomap infomap", shell_output("#{bin}/Infomap --completion zsh")
+    end
   end
 end
